@@ -1,7 +1,14 @@
 use std::env;
 use std::process::Command;
+use rusqlite::ffi::Error;
 use rusqlite::{Connection, Result};
-
+use ollama_rs::{
+    generation::completion::{
+        request::GenerationRequest, GenerationContext, GenerationResponseStreamChunk,
+    },
+    Ollama,
+};
+use tokio;
 
 struct Arg {
     name: String,
@@ -12,10 +19,16 @@ struct Config {
     executable_path: String,
 
 }
-fn main() {
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = env::args().collect();
     let mut parsed_args = Vec::new();
     let output_report = String::from("output_report");
+
+    let mut input = "Hello llama2, how are you today?";
+
+    let mut context: Option<GenerationContext> = None;
+    let ollama = Ollama::default();
 
     for i in 1..args.len() {
         let arg = &args[i];
@@ -30,7 +43,14 @@ fn main() {
 
     execute_nsys(&config, &output_report);
 
-    analyze_report(format!("{}.sqlite", &output_report).as_str()).expect("Failed to analyze report");
+    let mut request = GenerationRequest::new("llama2:latest".into(), input.to_string());
+    if let Some(ctx) = &context {
+        request.context = Some(ctx.clone());
+    }
+
+    let response = get_response(request, &ollama).await.expect("Failed to get response");
+    println!("Response: {:?}", response);
+    // analyze_report(format!("{}.sqlite", &output_report).as_str()).expect("Failed to analyze report");
 
 
 
@@ -39,12 +59,20 @@ fn main() {
 
 fn parse_config(args: &[Arg]) -> Config {
     let mut executable_path = String::new();
+    let mut found_exec = false;
 
     for arg in args {
         match arg.name.as_str() {
-            "exec" => executable_path = arg.value.clone(),
+            "exec" => {
+                executable_path = arg.value.clone();
+                found_exec = true;
+            },
             _ => {}
         }
+    }
+    if !found_exec {
+        eprintln!("Error: --exec argument is required.");
+        std::process::exit(1);
     }
 
     Config { executable_path }
@@ -85,6 +113,14 @@ fn analyze_report(db_path: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+async fn get_response(request: GenerationRequest<'_>, ollama: &Ollama) -> std::result::Result<String, ()> {
+    let response = ollama
+        .generate(request)
+        .await
+        .expect("Failed to generate completion");
+    Ok(response.response)
 }
 
 

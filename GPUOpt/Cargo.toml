@@ -4,4 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.100"
+ollama = "0.0.1"
+ollama-rs = "0.3.2"
 rusqlite = { version = "0.37.0", features = ["bundled"] }
+tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
